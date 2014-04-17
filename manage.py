@@ -37,14 +37,12 @@ def create_db():
 
 
 @manager.command
-def create_testdata():
+def create_testdata(challenges=10, tasks=100):
     """Creates test data in the database"""
     import uuid
     import random
     from maproulette.models import db, Challenge, Task, TaskGeometry, Action
     from shapely.geometry import Point, LineString, box
-    num_challenges = 10
-    num_tasks = 100
     # the gettysburg address
     challenge_help_test = "Sample challenge *help* text"
     challenge_instruction_test = "Challenge instruction text"
@@ -55,20 +53,20 @@ def create_testdata():
     db.session.query(Task).delete()
     db.session.query(Challenge).delete()
     db.session.commit()
-    for i in range(1, num_challenges + 1):
+    for i in range(1, int(challenges) + 1):
         print "Generating Test Challenge #%d" % i
         minx = -120
         maxx = -40
         miny = 20
         maxy = 50
         challengepoly = None
-        slug = "test%d" % i 
+        slug = "test%d" % i
         title = "Test Challenge %d" % i
         challenge = Challenge(slug, title)
         challenge.difficulty = random.choice([1, 2, 3])
         challenge.active = True
         challenge.blurb = "This is test challenge number %d" % i
-        challenge.description = "This describes test challenge %d in detail" % i
+        challenge.description = "This describes challenge %d in detail" % i
         challenge.help = challenge_help_test
         challenge.instruction = challenge_instruction_test
         # have bounding boxes for all but the first two challenges.
@@ -83,9 +81,9 @@ def create_testdata():
         db.session.add(challenge)
 
         # add some tasks to the challenge
-        print "\tGenerating %i tasks for challenge %i" % (num_tasks, i)
+        print "\tGenerating %i tasks for challenge %i" % (int(tasks), i)
         # generate NUM_TASKS random tasks
-        for j in range(num_tasks):
+        for j in range(int(tasks)):
             # generate a unique identifier
             identifier = str(uuid.uuid4())
             # instantiate the task and register it with challenge 'test'
@@ -115,6 +113,31 @@ def create_testdata():
 
     # commit the generated tasks and the challenge to the database.
     db.session.commit()
+
+
+@manager.command
+def clean_stale_tasks():
+
+    from maproulette.models import db, Task, Action
+    from sqlalchemy.sql.functions import max
+    from datetime import datetime, timedelta
+    import pytz
+
+    current_time = datetime.now(pytz.utc)
+    stale_threshold = current_time - timedelta(hours=1)
+    counter = 0
+
+    for task in db.session.query(Task).filter(
+        Task.currentaction.in_(['assigned', 'editing'])).join(
+        Task.actions).group_by(
+        Task.id).having(max(Action.timestamp) < stale_threshold).all():
+        task.append_action(Action("available"))
+        db.session.add(task)
+        print "setting task %s to available" % (task.identifier)
+        counter += 1
+    db.session.commit()
+    print 'done. %i tasks made available' % counter
+
 
 if __name__ == "__main__":
     manager.run()

@@ -1,0 +1,29 @@
+server {
+    listen 80;
+    server_tokens off;
+    server_name {{instance}};
+
+     location / {
+         include uwsgi_params;
+         uwsgi_pass unix:/tmp/{{instance}}.sock;
+     }
+
+{% if settings != 'dev' -%}
+     ## Only requests to our Host are allowed
+     if ($host !~ ^({{instance}})$ ) {
+        return 444;
+     }
+
+    location /admin {
+        allow 127.0.0.1;
+        deny all;
+    }
+
+    location /api/admin {
+        allow 127.0.0.1;
+        deny all;
+    }
+
+{% endif -%}
+}
+

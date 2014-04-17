@@ -84,7 +84,6 @@ api = Api(app)
 def output_json(data, code, headers=None):
     """Automatic JSON / GeoJSON output"""
     # return empty result if data contains nothing
-    app.logger.debug(data)
     if not data:
         resp = make_response(geojson.dumps({}), code)
     # if this is a Shapely object, dump it as geojson
@@ -359,15 +358,6 @@ class ApiChallengeTask(ProtectedResource):
         lon = args['lon']
         lat = args['lat']
 
-        app.logger.info(
-            "{user} requesting task from {challenge} near\
-             ({lon}, {lat}) assiging: {assign}".format(
-            user=osmid,
-            challenge=slug,
-            lon=lon,
-            lat=lat,
-            assign=assign))
-
         task = None
         if lon and lat:
             coordWKT = 'POINT(%s %s)' % (lat, lon)
@@ -377,13 +367,14 @@ class ApiChallengeTask(ProtectedResource):
             # If no location is specified, or no tasks were found, gather
             # random tasks
             task = get_random_task(challenge)
+            app.logger.debug('got task %s' % task.id)
             # If no tasks are found with this method, then this challenge
             # is complete
         if task is None:
             # Send a mail to the challenge admin
             requests.post(
                 "https://api.mailgun.net/v2/maproulette.org/messages",
-                auth=("api", "key-0xnt4hrv-bdqan3uu9qbmam74mn8wmk1"),
+                auth=("api", app.config["MAILGUN_API_KEY"]),
                 data={"from": "MapRoulette <admin@maproulette.org>",
                       "to": ["maproulette@maproulette.org"],
                       "subject":
@@ -547,7 +538,7 @@ class AdminApiTaskStatuses(Resource):
 
     def get(self, slug):
         """Return task statuses for the challenge identified by 'slug'"""
-        challenge = get_challenge_or_404(slug, True)
+        challenge = get_challenge_or_404(slug, True, False)
         return [{
             'identifier': task.identifier,
             'status': task.currentaction} for task in challenge.tasks]
